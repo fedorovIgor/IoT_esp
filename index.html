@@ -6,7 +6,6 @@
     <title>Метеостанция ESP32 Ultimate Dashboard</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1"></script>
     <script>
         if (localStorage.getItem('theme') === 'light') {
@@ -20,6 +19,7 @@
         .light-mode .bg-gray-950 { background-color: #ffffff; border-color: #e5e7eb; }
         .light-mode .text-gray-400 { color: #4b5563; }
         .light-mode .border-gray-700 { border-color: #e5e7eb; }
+        .light-mode input.bg-gray-700 { background-color: #e5e7eb; }
     </style>
 </head>
 <body class="bg-gray-900 text-gray-100 min-h-screen flex flex-col items-center justify-center p-4 transition-colors duration-200">
@@ -29,7 +29,7 @@
         <div class="space-y-4">
             <div>
                 <label class="block text-sm text-gray-400 mb-1">Email в Firebase</label>
-                <input type="email" id="emailInput" class="w-full bg-gray-700 light-mode:bg-white p-2 rounded border border-gray-600 focus:outline-none focus:border-blue-500 text-current">
+                <input type="email" id="emailInput" class="w-full bg-gray-700 p-2 rounded border border-gray-600 focus:outline-none focus:border-blue-500 text-current">
             </div>
             <div>
                 <label class="block text-sm text-gray-400 mb-1">Пароль</label>
@@ -55,6 +55,7 @@
             </div>
             <div class="flex items-center gap-2 self-end sm:self-auto">
                 <button id="themeToggleBtn" class="bg-gray-700 hover:bg-gray-600 text-sm font-medium px-3 py-2 rounded transition">🌓 Тема</button>
+                <button id="exportCsvBtn" class="bg-emerald-600/70 hover:bg-emerald-600 text-sm font-medium px-3 py-2 rounded transition">📎 CSV</button>
                 <button id="logoutBtn" class="bg-red-600 hover:bg-red-500 text-sm font-semibold px-4 py-2 rounded transition">Выйти</button>
             </div>
         </div>
@@ -178,9 +179,17 @@
         let unsubscribeData = null; 
         let cachedAllReadings = [];
 
-        let selectedRange = "24h"; 
-        let currentScaleMode = "auto"; 
-        let currentChartMode = "combined"; 
+        // Настройки (с загрузкой из localStorage)
+        let selectedRange = localStorage.getItem('selectedRange') || "24h"; 
+        let currentScaleMode = localStorage.getItem('scaleMode') || "auto"; 
+        let currentChartMode = localStorage.getItem('chartMode') || "combined";
+        let logLuxEnabled = localStorage.getItem('logLux') !== 'false'; // true по умолчанию
+        let checkboxesState = JSON.parse(localStorage.getItem('checkboxesState')) || {
+            'chk-temp': true,
+            'chk-hum': true,
+            'chk-press': true,
+            'chk-lux': true
+        };
 
         const loginCard = document.getElementById('loginCard');
         const dashboard = document.getElementById('dashboard');
@@ -204,10 +213,38 @@
             "30d": 30 * 86400
         };
 
+        // Применяем сохранённые состояния чекбоксов
+        function applySavedCheckboxes() {
+            for (const [id, val] of Object.entries(checkboxesState)) {
+                const chk = document.getElementById(id);
+                if (chk) chk.checked = val;
+            }
+            document.getElementById('logLux').checked = logLuxEnabled;
+        }
+
+        // Сохраняем состояние чекбокса
+        function saveCheckboxState(id, value) {
+            checkboxesState[id] = value;
+            localStorage.setItem('checkboxesState', JSON.stringify(checkboxesState));
+        }
+
         onAuthStateChanged(auth, (user) => {
             if (user) {
                 loginCard.classList.add('hidden');
                 dashboard.classList.remove('hidden');
+                applySavedCheckboxes();
+                // Установка UI в соответствии с загруженными настройками
+                document.getElementById('scaleMode').value = currentScaleMode;
+                document.getElementById('chartMode').value = currentChartMode;
+                document.getElementById('logLux').checked = logLuxEnabled;
+                // Подсветка активной кнопки периода
+                document.querySelectorAll('.range-btn').forEach(btn => {
+                    if (btn.getAttribute('data-range') === selectedRange) {
+                        btn.className = "range-btn bg-blue-600 text-xs px-3 py-1.5 rounded border border-blue-500 transition font-medium";
+                    } else {
+                        btn.className = "range-btn bg-gray-800 hover:bg-gray-700 text-xs px-3 py-1.5 rounded border border-gray-600 transition";
+                    }
+                });
                 startDataSubscription();
             } else {
                 stopDataSubscription();
@@ -243,6 +280,27 @@
             }
         });
 
+        // Экспорт CSV
+        document.getElementById('exportCsvBtn').addEventListener('click', () => {
+            if (!cachedAllReadings.length) {
+                alert('Нет данных для экспорта');
+                return;
+            }
+            const headers = ['timestamp_iso', 'timestamp_unix', 'temp_c', 'hum_percent', 'press_hpa', 'press_mmHg', 'lux'];
+            const rows = cachedAllReadings.map(r => {
+                const date = new Date(r.ts * 1000);
+                return `${date.toISOString()},${r.ts},${r.temp},${r.hum},${r.press},${(r.press * 0.750062).toFixed(1)},${r.lux}`;
+            });
+            const csv = [headers.join(','), ...rows].join('\n');
+            const blob = new Blob([csv], {type: 'text/csv'});
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = `weather_${new Date().toISOString().slice(0,19)}.csv`;
+            a.click();
+            URL.revokeObjectURL(a.href);
+        });
+
+        // Обработчики кнопок периода с сохранением
         document.querySelectorAll('.range-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 document.querySelectorAll('.range-btn').forEach(b => {
@@ -250,21 +308,26 @@
                 });
                 e.target.className = "range-btn bg-blue-600 text-xs px-3 py-1.5 rounded border border-blue-500 transition font-medium";
                 selectedRange = e.target.getAttribute('data-range');
+                localStorage.setItem('selectedRange', selectedRange);
                 startDataSubscription();
             });
         });
 
         document.getElementById('scaleMode').addEventListener('change', (e) => {
             currentScaleMode = e.target.value;
+            localStorage.setItem('scaleMode', currentScaleMode);
             processAndRenderData();
         });
 
         document.getElementById('chartMode').addEventListener('change', (e) => {
             currentChartMode = e.target.value;
+            localStorage.setItem('chartMode', currentChartMode);
             processAndRenderData();
         });
 
-        document.getElementById('logLux').addEventListener('change', () => {
+        document.getElementById('logLux').addEventListener('change', (e) => {
+            logLuxEnabled = e.target.checked;
+            localStorage.setItem('logLux', logLuxEnabled);
             processAndRenderData();
         });
 
@@ -273,7 +336,9 @@
         });
 
         checkboxConfigs.forEach(cfg => {
-            document.getElementById(cfg.id).addEventListener('change', (e) => {
+            const chk = document.getElementById(cfg.id);
+            chk.addEventListener('change', (e) => {
+                saveCheckboxState(cfg.id, e.target.checked);
                 if (myChart && currentChartMode === "combined") {
                     myChart.setDatasetVisibility(cfg.index, e.target.checked);
                     myChart.options.scales[cfg.axis].display = e.target.checked;
@@ -313,6 +378,13 @@
             });
         }
 
+        // Даунсэмплинг (прореживание для долгих периодов)
+        function downsample(data, maxPoints = 800) {
+            if (data.length <= maxPoints) return data;
+            const step = Math.ceil(data.length / maxPoints);
+            return data.filter((_, i) => i % step === 0);
+        }
+
         function processAndRenderData() {
             if (cachedAllReadings.length === 0) return;
             const nowSec = Date.now() / 1000;
@@ -330,17 +402,24 @@
             const lastPoint = cachedAllReadings[cachedAllReadings.length - 1];
             updateWidgets(lastPoint);
             calculateTrendsAndForecast(cachedAllReadings);
-            const labels = filteredReadings.map(pt => {
+            
+            // Даунсэмплинг для долгих периодов (если точек больше 800)
+            let sampled = filteredReadings;
+            if (filteredReadings.length > 800 && (selectedRange === "30d" || selectedRange === "all")) {
+                sampled = downsample(filteredReadings, 800);
+            }
+            
+            const labels = sampled.map(pt => {
                 const d = new Date(pt.ts * 1000);
                 return selectedRange === "7d" || selectedRange === "30d" || selectedRange === "all"
                     ? d.toLocaleDateString('ru-RU', {day:'numeric', month:'short'}) + ' ' + d.toLocaleTimeString('ru-RU', {hour:'2-digit', minute:'2-digit'})
                     : d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
             });
-            const timestamps = filteredReadings.map(pt => pt.ts);
-            const temps = filteredReadings.map(pt => Number(pt.temp));
-            const hums = filteredReadings.map(pt => Number(pt.hum));
-            const press = filteredReadings.map(pt => Math.round(Number(pt.press) * 0.750062));
-            const lux = filteredReadings.map(pt => {
+            const timestamps = sampled.map(pt => pt.ts);
+            const temps = sampled.map(pt => Number(pt.temp));
+            const hums = sampled.map(pt => Number(pt.hum));
+            const press = sampled.map(pt => Math.round(Number(pt.press) * 0.750062));
+            const lux = sampled.map(pt => {
                 const l = Number(pt.lux);
                 return l <= 0 ? 1 : l;
             });
@@ -350,6 +429,7 @@
         }
 
         function calculateStats(temps, hums, press) {
+            if (!temps.length || !hums.length || !press.length) return;
             const getAvg = arr => (arr.reduce((a, b) => a + b, 0) / arr.length).toFixed(1);
             document.getElementById('stat-temp-min').innerText = Math.min(...temps).toFixed(1) + '°C';
             document.getElementById('stat-temp-max').innerText = Math.max(...temps).toFixed(1) + '°C';
@@ -428,6 +508,14 @@
             return { slope, intercept, r2 };
         }
 
+        // Вспомогательная функция поиска ближайшей точки по времени
+        function findClosestPoint(points, targetTs) {
+            if (!points.length) return null;
+            return points.reduce((prev, curr) => 
+                Math.abs(curr.ts - targetTs) < Math.abs(prev.ts - targetTs) ? curr : prev
+            );
+        }
+
         function calculateTrendsAndForecast(allPoints) {
             const forecastDiv = document.getElementById('forecastWidget');
             const trendDetailsSpan = document.getElementById('trendDetails');
@@ -446,6 +534,8 @@
                 return;
             }
             recentPoints.sort((a,b) => a.ts - b.ts);
+            
+            // Давление (регрессия как было)
             let rawPress = recentPoints.map(p => p.press * 0.750062);
             let smoothedPress = medianSmoothing(rawPress, 5);
             let timestamps = recentPoints.map(p => p.ts);
@@ -465,12 +555,31 @@
                 let reg6 = linearRegression(x6, smoothedPress6);
                 delta6h = reg6.slope * (6 * 3600);
             }
+            
+            // --- ИСПРАВЛЕННЫЙ РАСЧЁТ ТРЕНДОВ ВЛАЖНОСТИ И ТЕМПЕРАТУРЫ ЗА 3 ЧАСА ---
+            const threeHoursAgo = nowSec - 3 * 3600;
+            // Ищем точку, ближайшую к 3 часам назад
+            const point3h = findClosestPoint(recentPoints, threeHoursAgo);
+            let humChange3h = 0, tempChange3h = 0;
+            if (point3h) {
+                const idx3h = recentPoints.findIndex(p => p.ts === point3h.ts);
+                if (idx3h !== -1 && idx3h < recentPoints.length-1) {
+                    const humNow = recentPoints[recentPoints.length-1].hum;
+                    const humThen = recentPoints[idx3h].hum;
+                    humChange3h = humNow - humThen;
+                    const tempNow = recentPoints[recentPoints.length-1].temp;
+                    const tempThen = recentPoints[idx3h].temp;
+                    tempChange3h = tempNow - tempThen;
+                }
+            }
+            // Также вычислим общее изменение за 12 часов (для прогноза)
             let rawHum = recentPoints.map(p => p.hum);
             let smoothedHum = medianSmoothing(rawHum, 5);
-            let humChange = smoothedHum[smoothedHum.length-1] - smoothedHum[0];
+            let humChange12h = smoothedHum[smoothedHum.length-1] - smoothedHum[0];
             let rawTemp = recentPoints.map(p => p.temp);
             let smoothedTemp = medianSmoothing(rawTemp, 5);
-            let tempChange = smoothedTemp[smoothedTemp.length-1] - smoothedTemp[0];
+            let tempChange12h = smoothedTemp[smoothedTemp.length-1] - smoothedTemp[0];
+            
             let lastLux = recentPoints[recentPoints.length-1].lux;
             let isDark = lastLux < 50;
             let lastPressMm = rawPress[rawPress.length-1];
@@ -481,17 +590,19 @@
             else if (delta3h <= -0.5) score += 1;
             else if (delta3h >= 2.5) score -= 2;
             else if (delta3h >= 1.0) score -= 1;
-            if (humChange > 10) score += 1;
-            if (humChange > 20) score += 1;
-            if (tempChange < -1.5) score += 1;
+            
+            if (humChange12h > 10) score += 1;
+            if (humChange12h > 20) score += 1;
+            if (tempChange12h < -1.5) score += 1;
             if (isDark && delta3h < -1) score += 1;
             if (lastPressMm < 745) {
                 score += 1;
                 if (lastPressMm < 730) score += 1;
             }
             score = Math.min(6, Math.max(-2, score));
+            
             let forecastText = "", forecastIcon = "";
-            if (delta3h <= -4.0 && humChange > 15) {
+            if (delta3h <= -4.0 && humChange12h > 15) {
                 forecastText = "⚠️ Штормовое предупреждение! Ожидаются сильные осадки и ветер";
                 forecastIcon = "⛈️🌊";
             } else if (score >= 4) {
@@ -513,89 +624,18 @@
             forecastDiv.innerHTML = `<div class="flex items-center gap-2">${forecastIcon} ${forecastText}</div>`;
             if (trendDetailsSpan) trendDetailsSpan.innerText = trendDetails;
             forecastDiv.className = "mt-2 text-sm font-semibold flex flex-col items-start gap-1 " + (score >= 3 ? "text-red-400" : (score <= -1 ? "text-green-400" : "text-amber-300"));
-            if (smoothedHum.length >= 2) {
-                let hum3h = smoothedHum[smoothedHum.length-1] - (smoothedHum[smoothedHum.length-2] || smoothedHum[0]);
-                document.getElementById('trend-hum').innerHTML = `${hum3h > 0 ? "↑ +" : "↓ "}${Math.abs(hum3h).toFixed(0)}% (3ч)`;
-                document.getElementById('trend-hum').className = `text-xs font-medium mt-1 ${hum3h > 0 ? 'text-red-400' : 'text-blue-400'}`;
-            }
-            if (smoothedTemp.length >= 2) {
-                let temp3h = smoothedTemp[smoothedTemp.length-1] - (smoothedTemp[smoothedTemp.length-2] || smoothedTemp[0]);
-                document.getElementById('trend-temp').innerHTML = `${temp3h > 0 ? "↑ +" : "↓ "}${Math.abs(temp3h).toFixed(1)}°C (3ч)`;
-                document.getElementById('trend-temp').className = `text-xs font-medium mt-1 ${temp3h > 0 ? 'text-red-400' : 'text-blue-400'}`;
+            
+            // Обновляем тренды на карточках (теперь честные 3ч)
+            if (point3h) {
+                const humDiff = humChange3h;
+                const tempDiff = tempChange3h;
+                document.getElementById('trend-hum').innerHTML = `${humDiff > 0 ? "↑ +" : "↓ "}${Math.abs(humDiff).toFixed(0)}% (3ч)`;
+                document.getElementById('trend-hum').className = `text-xs font-medium mt-1 ${humDiff > 0 ? 'text-red-400' : 'text-blue-400'}`;
+                document.getElementById('trend-temp').innerHTML = `${tempDiff > 0 ? "↑ +" : "↓ "}${Math.abs(tempDiff).toFixed(1)}°C (3ч)`;
+                document.getElementById('trend-temp').className = `text-xs font-medium mt-1 ${tempDiff > 0 ? 'text-red-400' : 'text-blue-400'}`;
             }
             document.getElementById('trend-press').innerHTML = `${delta3h > 0 ? "↑ +" : "↓ "}${Math.abs(delta3h).toFixed(1)} мм (3ч)`;
             document.getElementById('trend-press').className = `text-xs font-medium mt-1 ${delta3h > 0 ? 'text-emerald-400' : 'text-amber-500'}`;
-        }
-
-        function updateChart(labels, timestamps, temps, hums, press, lux, scaleConfig) {
-            const ctx = document.getElementById('weatherChart').getContext('2d');
-            const showTemp = currentChartMode === "combined" || currentChartMode === "temperature";
-            const showHum = currentChartMode === "combined";
-            const showPress = currentChartMode === "combined" || currentChartMode === "pressure";
-            const showLux = currentChartMode === "combined";
-            if (myChart) {
-                myChart.data.labels = labels;
-                myChart.data.timestamps = timestamps;
-                myChart.data.datasets[0].data = temps;
-                myChart.data.datasets[1].data = hums;
-                myChart.data.datasets[2].data = press;
-                myChart.data.datasets[3].data = lux;
-                myChart.setDatasetVisibility(0, showTemp && document.getElementById('chk-temp').checked);
-                myChart.setDatasetVisibility(1, showHum && document.getElementById('chk-hum').checked);
-                myChart.setDatasetVisibility(2, showPress && document.getElementById('chk-press').checked);
-                myChart.setDatasetVisibility(3, showLux && document.getElementById('chk-lux').checked);
-                myChart.options.scales = scaleConfig;
-                myChart.update('none');
-                return;
-            }
-            const dayNightBackgroundPlugin = {
-                id: 'dayNightBackground',
-                beforeDraw: (chart) => {
-                    const { ctx, scales: { x, yTemp, yPress } } = chart;
-                    const activeY = yTemp.display ? yTemp : yPress;
-                    const top = activeY.top;
-                    const bottom = activeY.bottom;
-                    const tsArray = chart.data.timestamps;
-                    if (!tsArray || tsArray.length < 2) return;
-                    ctx.save();
-                    for (let i = 0; i < tsArray.length - 1; i++) {
-                        const date = new Date(tsArray[i] * 1000);
-                        const hour = date.getHours();
-                        if (hour >= 22 || hour < 6) {
-                            const left = chart.getDatasetMeta(0).data[i]?.x;
-                            const right = chart.getDatasetMeta(0).data[i+1]?.x;
-                            if (left !== undefined && right !== undefined) {
-                                ctx.fillStyle = 'rgba(31, 41, 55, 0.4)'; 
-                                ctx.fillRect(left, top, right - left, bottom - top);
-                            }
-                        }
-                    }
-                    ctx.restore();
-                }
-            };
-            myChart = new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels: labels,
-                    timestamps: timestamps,
-                    datasets: [
-                        { label: 'Температура', data: temps, borderColor: '#ef4444', backgroundColor: 'transparent', yAxisID: 'yTemp', tension: 0.2, borderWidth: 2, pointRadius: labels.length > 150 ? 0 : 1 },
-                        { label: 'Влажность', data: hums, borderColor: '#3b82f6', backgroundColor: 'transparent', yAxisID: 'yHum', tension: 0.2, borderWidth: 2, pointRadius: labels.length > 150 ? 0 : 1 },
-                        { label: 'Давление', data: press, borderColor: '#10b981', backgroundColor: 'transparent', yAxisID: 'yPress', tension: 0.2, borderWidth: 2, pointRadius: labels.length > 150 ? 0 : 1 },
-                        { label: 'Освещенность', data: lux, borderColor: '#f59e0b', backgroundColor: 'transparent', yAxisID: 'yLux', tension: 0.2, borderWidth: 2, pointRadius: labels.length > 150 ? 0 : 1 }
-                    ]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    scales: scaleConfig,
-                    plugins: {
-                        legend: { display: false },
-                        zoom: { zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'x' }, pan: { enabled: true, mode: 'x' } }
-                    }
-                },
-                plugins: [dayNightBackgroundPlugin]
-            });
         }
 
         function updateWidgets(lastPoint) {
@@ -620,6 +660,83 @@
                 else if (hours > 0) timeAgo = `${hours} ч. назад`;
                 statusBadge.innerHTML = `<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-900/50 text-red-400 border border-red-500/30"><span class="w-2 h-2 mr-1.5 bg-red-500 rounded-full"></span>Офлайн (${timeAgo})</span>`;
             }
+        }
+
+        function updateChart(labels, timestamps, temps, hums, press, lux, scaleConfig) {
+            const ctx = document.getElementById('weatherChart').getContext('2d');
+            const showTemp = currentChartMode === "combined" || currentChartMode === "temperature";
+            const showHum = currentChartMode === "combined";
+            const showPress = currentChartMode === "combined" || currentChartMode === "pressure";
+            const showLux = currentChartMode === "combined";
+        
+            if (myChart) {
+                myChart.data.labels = labels;
+                myChart.data.timestamps = timestamps;
+                myChart.data.datasets[0].data = temps;
+                myChart.data.datasets[1].data = hums;
+                myChart.data.datasets[2].data = press;
+                myChart.data.datasets[3].data = lux;
+                myChart.setDatasetVisibility(0, showTemp && document.getElementById('chk-temp').checked);
+                myChart.setDatasetVisibility(1, showHum && document.getElementById('chk-hum').checked);
+                myChart.setDatasetVisibility(2, showPress && document.getElementById('chk-press').checked);
+                myChart.setDatasetVisibility(3, showLux && document.getElementById('chk-lux').checked);
+                myChart.options.scales = scaleConfig;
+                myChart.update('none');
+                return;
+            }
+        
+            const dayNightBackgroundPlugin = {
+                id: 'dayNightBackground',
+                beforeDraw: (chart) => {
+                    const { ctx, chartArea: { top, bottom, left: areaLeft, right: areaRight }, scales: { x } } = chart;
+                    const tsArray = chart.data.timestamps;
+                    if (!tsArray || tsArray.length < 2) return;
+                    ctx.save();
+                    for (let i = 0; i < tsArray.length - 1; i++) {
+                        const date = new Date(tsArray[i] * 1000);
+                        const hour = date.getHours();
+                        if (hour >= 22 || hour < 6) {
+                            const left = x.getPixelForValue(tsArray[i]);
+                            const right = x.getPixelForValue(tsArray[i + 1]);
+                            if (!isFinite(left) || !isFinite(right)) continue;
+                            if (right > areaLeft && left < areaRight) {
+                                const drawLeft = Math.max(left, areaLeft);
+                                const drawRight = Math.min(right, areaRight);
+                                ctx.fillStyle = 'rgba(31, 41, 55, 0.4)';
+                                ctx.fillRect(drawLeft, top, drawRight - drawLeft, bottom - top);
+                            }
+                        }
+                    }
+                    ctx.restore();
+                }
+            };
+        
+            myChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    timestamps: timestamps,
+                    datasets: [
+                        { label: 'Температура', data: temps, borderColor: '#ef4444', backgroundColor: 'transparent', yAxisID: 'yTemp', tension: 0.2, borderWidth: 2, pointRadius: labels.length > 150 ? 0 : 1 },
+                        { label: 'Влажность', data: hums, borderColor: '#3b82f6', backgroundColor: 'transparent', yAxisID: 'yHum', tension: 0.2, borderWidth: 2, pointRadius: labels.length > 150 ? 0 : 1 },
+                        { label: 'Давление', data: press, borderColor: '#10b981', backgroundColor: 'transparent', yAxisID: 'yPress', tension: 0.2, borderWidth: 2, pointRadius: labels.length > 150 ? 0 : 1 },
+                        { label: 'Освещенность', data: lux, borderColor: '#f59e0b', backgroundColor: 'transparent', yAxisID: 'yLux', tension: 0.2, borderWidth: 2, pointRadius: labels.length > 150 ? 0 : 1 }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: scaleConfig,
+                    plugins: {
+                        legend: { display: false },
+                        zoom: { 
+                            zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'x' }, 
+                            pan: { enabled: true, mode: 'x' } 
+                        }
+                    }
+                },
+                plugins: [dayNightBackgroundPlugin]
+            });
         }
 
         function stopDataSubscription() {

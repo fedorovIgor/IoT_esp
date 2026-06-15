@@ -9,13 +9,11 @@
     <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1"></script>
     <script>
-        // Первичная инициализация темы до рендеринга страницы во избежание мерцания
         if (localStorage.getItem('theme') === 'light') {
             document.documentElement.classList.add('light-mode');
         }
     </script>
     <style>
-        /* Стили для светлой темы */
         .light-mode { background-color: #f3f4f6; color: #1f2937; }
         .light-mode #dashboard, .light-mode #loginCard { background-color: #ffffff; border: 1px solid #e5e7eb; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
         .light-mode .bg-gray-900 { background-color: #f9fafb; border-color: #e5e7eb; }
@@ -43,7 +41,6 @@
     </div>
 
     <div id="dashboard" class="w-full max-w-6xl bg-gray-800 p-6 rounded-xl shadow-lg hidden">
-        
         <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 border-b border-gray-700 pb-4">
             <div>
                 <div class="flex flex-wrap items-center gap-3">
@@ -51,7 +48,7 @@
                     <div id="statusBadge"></div>
                 </div>
                 <p id="statusLabel" class="text-sm text-gray-400 mt-1">Подключение к базе данных...</p>
-                <div id="forecastWidget" class="mt-2 text-sm font-semibold text-amber-400 flex flex-col items-start gap-1">
+                <div id="forecastWidget" class="mt-2 text-sm font-semibold flex flex-col items-start gap-1">
                     <div class="flex items-center gap-2">🔮 Расчет прогноза...</div>
                     <div id="trendDetails" class="text-xs text-gray-400 font-normal"></div>
                 </div>
@@ -87,7 +84,7 @@
 
         <div class="flex flex-col gap-4 mb-4 bg-gray-900 p-4 rounded-lg border border-gray-700">
             <div class="flex flex-wrap items-center justify-between gap-4 border-b border-gray-700/50 pb-3">
-                <div class="flex items-center gap-1.5 id='rangeButtons'">
+                <div class="flex items-center gap-1.5">
                     <span class="text-xs text-gray-400 mr-1 uppercase">Период:</span>
                     <button data-range="6h" class="range-btn bg-gray-800 hover:bg-gray-700 text-xs px-3 py-1.5 rounded border border-gray-600 transition">6ч</button>
                     <button data-range="24h" class="range-btn bg-blue-600 text-xs px-3 py-1.5 rounded border border-blue-500 transition font-medium">24ч</button>
@@ -95,7 +92,6 @@
                     <button data-range="30d" class="range-btn bg-gray-800 hover:bg-gray-700 text-xs px-3 py-1.5 rounded border border-gray-600 transition">30д</button>
                     <button data-range="all" class="range-btn bg-gray-800 hover:bg-gray-700 text-xs px-3 py-1.5 rounded border border-gray-600 transition">Все</button>
                 </div>
-                
                 <div class="flex flex-wrap items-center gap-3 text-xs">
                     <div class="flex items-center gap-1.5">
                         <span class="text-gray-400">Режим отображения:</span>
@@ -115,7 +111,6 @@
                     <button id="resetZoomBtn" class="bg-amber-600/20 hover:bg-amber-600/40 text-amber-400 border border-amber-500/30 px-2 py-1.5 rounded transition">Сбросить зум</button>
                 </div>
             </div>
-
             <div class="flex flex-wrap gap-4 text-xs md:text-sm">
                 <label class="flex items-center gap-2 cursor-pointer text-red-400">
                     <input type="checkbox" id="chk-temp" checked class="w-4 h-4 accent-red-500"> Температура
@@ -130,7 +125,7 @@
                     <input type="checkbox" id="chk-lux" checked class="w-4 h-4 accent-amber-500"> Освещенность
                 </label>
                 <label class="flex items-center gap-2 cursor-pointer text-gray-400 ml-auto">
-                    <input type="checkbox" id="logLux" checked class="w-4 h-4 accent-gray-500"> Логарифм. Lux (Пункт 9)
+                    <input type="checkbox" id="logLux" checked class="w-4 h-4 accent-gray-500"> Логарифм. Lux
                 </label>
             </div>
         </div>
@@ -181,9 +176,8 @@
         const SEND_INTERVAL_MIN = 30; 
         let myChart = null;
         let unsubscribeData = null; 
-        let cachedAllReadings = []; // Хранилище сырого массива точек из базы
+        let cachedAllReadings = [];
 
-        // Текущие фильтры
         let selectedRange = "24h"; 
         let currentScaleMode = "auto"; 
         let currentChartMode = "combined"; 
@@ -203,7 +197,6 @@
             { id: 'chk-lux', index: 3, axis: 'yLux' }
         ];
 
-        // ТАЙМ-ФИЛЬТРЫ (В секундах)
         const ranges = {
             "6h": 6 * 3600,
             "24h": 24 * 3600,
@@ -211,7 +204,6 @@
             "30d": 30 * 86400
         };
 
-        // НАБЛЮДАТЕЛЬ СЕССИИ
         onAuthStateChanged(auth, (user) => {
             if (user) {
                 loginCard.classList.add('hidden');
@@ -226,7 +218,6 @@
             }
         });
 
-        // ОБРАБОТЧИКИ ВХОДА И ВЫХОДА
         document.getElementById('loginBtn').addEventListener('click', async () => {
             loginError.classList.add('hidden');
             try {
@@ -239,7 +230,6 @@
         });
         document.getElementById('logoutBtn').addEventListener('click', () => signOut(auth));
 
-        // СМЕНА СВЕТЛОЙ / ТЕМНОЙ ТЕМЫ
         document.getElementById('themeToggleBtn').addEventListener('click', () => {
             const isLight = document.documentElement.classList.toggle('light-mode');
             localStorage.setItem('theme', isLight ? 'light' : 'dark');
@@ -253,7 +243,6 @@
             }
         });
 
-        // ВЫБОР ОКНА ВРЕМЕНИ
         document.querySelectorAll('.range-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 document.querySelectorAll('.range-btn').forEach(b => {
@@ -265,29 +254,24 @@
             });
         });
 
-        // ПЕРЕКЛЮЧАТЕЛЬ МАСШТАБА ОСЕЙ
         document.getElementById('scaleMode').addEventListener('change', (e) => {
             currentScaleMode = e.target.value;
             processAndRenderData();
         });
 
-        // ПЕРЕКЛЮЧАТЕЛЬ РЕЖИМА ГРАФИКА
         document.getElementById('chartMode').addEventListener('change', (e) => {
             currentChartMode = e.target.value;
             processAndRenderData();
         });
 
-        // ЛОГАРИФМИЧЕСКИЙ ЧЕКБОКС LUX
         document.getElementById('logLux').addEventListener('change', () => {
             processAndRenderData();
         });
 
-        // СБРОС ЗУМА
         document.getElementById('resetZoomBtn').addEventListener('click', () => {
             if (myChart) myChart.resetZoom();
         });
 
-        // УПРАВЛЕНИЕ ВИДИМОСТЬЮ ДАТАСЕТОВ ИЗ ЧЕКБОКСОВ
         checkboxConfigs.forEach(cfg => {
             document.getElementById(cfg.id).addEventListener('change', (e) => {
                 if (myChart && currentChartMode === "combined") {
@@ -298,24 +282,19 @@
             });
         });
 
-        // ЗАГРУЗКА ИЗ FIREBASE С АДАПТИВНЫМ АРХИВОМ
         function startDataSubscription() {
             stopDataSubscription();
             statusLabel.innerText = "Загрузка метеоданных...";
-            
             let blocksToFetch = 48;
             if (selectedRange === "7d") blocksToFetch = 48 * 7;
             if (selectedRange === "30d" || selectedRange === "all") blocksToFetch = 48 * 35;
-
             const logsQuery = query(ref(db, '/devices/ESP32_01/logs'), limitToLast(blocksToFetch));
-
             unsubscribeData = onValue(logsQuery, (snapshot) => {
                 const logs = snapshot.val();
                 if (!logs) {
                     statusLabel.innerText = "База пуста.";
                     return;
                 }
-
                 cachedAllReadings = [];
                 Object.keys(logs).forEach(timeKey => {
                     const block = logs[timeKey];
@@ -327,7 +306,6 @@
                         });
                     }
                 });
-
                 cachedAllReadings.sort((a, b) => a.ts - b.ts);
                 processAndRenderData();
             }, (error) => {
@@ -335,31 +313,23 @@
             });
         }
 
-        // ОБРАБОТКА ФИЛЬТРОВ, МАТЕМАТИКИ И ТРЕНДОВ
         function processAndRenderData() {
             if (cachedAllReadings.length === 0) return;
-
             const nowSec = Date.now() / 1000;
             let filteredReadings = [];
-
             if (selectedRange === "all") {
                 filteredReadings = [...cachedAllReadings];
             } else {
                 const cutoff = nowSec - ranges[selectedRange];
                 filteredReadings = cachedAllReadings.filter(p => p.ts >= cutoff);
             }
-
             if (filteredReadings.length === 0) {
                 statusLabel.innerText = "Нет данных за выбранный интервал времени.";
                 return;
             }
-
             const lastPoint = cachedAllReadings[cachedAllReadings.length - 1];
             updateWidgets(lastPoint);
-            
-            // Расчет трендов и прогноза с улучшениями
             calculateTrendsAndForecast(cachedAllReadings);
-
             const labels = filteredReadings.map(pt => {
                 const d = new Date(pt.ts * 1000);
                 return selectedRange === "7d" || selectedRange === "30d" || selectedRange === "all"
@@ -374,51 +344,35 @@
                 const l = Number(pt.lux);
                 return l <= 0 ? 1 : l;
             });
-
             calculateStats(temps, hums, press);
             const scaleConfig = buildScalesConfig(temps, hums, press, lux);
             updateChart(labels, timestamps, temps, hums, press, lux, scaleConfig);
         }
 
-        // РАСЧЕТ СТАТИСТИКИ
         function calculateStats(temps, hums, press) {
             const getAvg = arr => (arr.reduce((a, b) => a + b, 0) / arr.length).toFixed(1);
-            
             document.getElementById('stat-temp-min').innerText = Math.min(...temps).toFixed(1) + '°C';
             document.getElementById('stat-temp-max').innerText = Math.max(...temps).toFixed(1) + '°C';
             document.getElementById('stat-temp-avg').innerText = getAvg(temps) + '°C';
-
             document.getElementById('stat-hum-min').innerText = Math.round(Math.min(...hums)) + '%';
             document.getElementById('stat-hum-max').innerText = Math.round(Math.max(...hums)) + '%';
             document.getElementById('stat-hum-avg').innerText = Math.round(getAvg(hums)) + '%';
-
             document.getElementById('stat-press-min').innerText = Math.min(...press) + ' мм';
             document.getElementById('stat-press-max').innerText = Math.max(...press) + ' мм';
             document.getElementById('stat-press-avg').innerText = Math.round(getAvg(press)) + ' мм';
         }
 
-        // КОНСТРУКТОР ДИНАМИЧЕСКИХ ВЕЛИЧИН ОСЕЙ
         function buildScalesConfig(temps, hums, press, lux) {
             const isLight = document.documentElement.classList.contains('light-mode');
             const gridColor = isLight ? '#e5e7eb' : '#374151';
             const textColor = isLight ? '#4b5563' : '#9ca3af';
-
             let config = {
                 x: { grid: { color: gridColor }, ticks: { color: textColor } },
                 yTemp: { type: 'linear', position: 'left', display: document.getElementById('chk-temp').checked && currentChartMode !== "pressure", grid: { color: gridColor }, ticks: { color: '#ef4444' }, title: { display: true, text: '°C', color: '#ef4444' } },
                 yHum: { type: 'linear', position: 'right', display: document.getElementById('chk-hum').checked && currentChartMode === "combined", grid: { drawOnChartArea: false }, ticks: { color: '#3b82f6' }, title: { display: true, text: '%', color: '#3b82f6' } },
                 yPress: { type: 'linear', position: 'left', display: document.getElementById('chk-press').checked && currentChartMode !== "temperature", grid: { drawOnChartArea: currentChartMode === "pressure" }, ticks: { color: '#10b981' }, title: { display: true, text: 'мм рт.ст.', color: '#10b981' } },
-                yLux: { 
-                    type: document.getElementById('logLux').checked ? 'logarithmic' : 'linear', 
-                    position: 'right', 
-                    display: document.getElementById('chk-lux').checked && currentChartMode === "combined", 
-                    grid: { drawOnChartArea: false }, 
-                    ticks: { color: '#f59e0b', callback: value => Number(value).toString() }, 
-                    title: { display: true, text: 'Lux', color: '#f59e0b' }, 
-                    min: 1 
-                }
+                yLux: { type: document.getElementById('logLux').checked ? 'logarithmic' : 'linear', position: 'right', display: document.getElementById('chk-lux').checked && currentChartMode === "combined", grid: { drawOnChartArea: false }, ticks: { color: '#f59e0b', callback: value => Number(value).toString() }, title: { display: true, text: 'Lux', color: '#f59e0b' }, min: 1 }
             };
-
             if (currentScaleMode === "auto") {
                 config.yTemp.suggestedMin = Math.min(...temps) - 2;
                 config.yTemp.suggestedMax = Math.max(...temps) + 2;
@@ -434,14 +388,12 @@
                 config.yPress.min = 720;
                 config.yPress.max = 790;
             }
-
             return config;
         }
 
-        // ---------- НОВЫЕ УЛУЧШЕННЫЕ ФУНКЦИИ ----------
-
-        // Скользящая медиана (окно 5) – устойчива к выбросам
+        // Медианное сглаживание
         function medianSmoothing(data, windowSize = 5) {
+            if (!data || data.length === 0) return [];
             if (data.length <= windowSize) return [...data];
             const result = [];
             const half = Math.floor(windowSize / 2);
@@ -450,13 +402,11 @@
                 const end = Math.min(data.length, i + half + 1);
                 const window = data.slice(start, end);
                 window.sort((a, b) => a - b);
-                const median = window[Math.floor(window.length / 2)];
-                result.push(median);
+                result.push(window[Math.floor(window.length / 2)]);
             }
             return result;
         }
 
-        // Линейная регрессия
         function linearRegression(x, y) {
             const n = x.length;
             if (n < 2) return { slope: 0, intercept: 0, r2: 0 };
@@ -478,42 +428,32 @@
             return { slope, intercept, r2 };
         }
 
-        // ГЛАВНАЯ ФУНКЦИЯ РАСЧЁТА ПРОГНОЗА (с учётом медианного сглаживания, тренда 6ч, абсолютного давления)
         function calculateTrendsAndForecast(allPoints) {
             const forecastDiv = document.getElementById('forecastWidget');
             const trendDetailsSpan = document.getElementById('trendDetails');
-            
+            if (!forecastDiv) return;
             if (!allPoints || allPoints.length < 5) {
                 forecastDiv.innerHTML = '<div class="flex items-center gap-2">🔮 Недостаточно данных для прогноза</div>';
-                trendDetailsSpan.innerText = '';
+                if (trendDetailsSpan) trendDetailsSpan.innerText = '';
                 return;
             }
-            
             const nowSec = Date.now() / 1000;
             const H12 = 12 * 3600;
             let recentPoints = allPoints.filter(p => (nowSec - p.ts) <= H12);
             if (recentPoints.length < 4) {
                 forecastDiv.innerHTML = '<div class="flex items-center gap-2">🔮 Мало свежих данных (менее 4 точек за 12ч)</div>';
-                trendDetailsSpan.innerText = '';
+                if (trendDetailsSpan) trendDetailsSpan.innerText = '';
                 return;
             }
-            
             recentPoints.sort((a,b) => a.ts - b.ts);
-            
-            // ---- Давление (мм рт.ст.) ----
             let rawPress = recentPoints.map(p => p.press * 0.750062);
             let smoothedPress = medianSmoothing(rawPress, 5);
-            
             let timestamps = recentPoints.map(p => p.ts);
             let t0 = timestamps[0];
             let x = timestamps.map(t => t - t0);
-            
-            // Регрессия за 3 часа (все точки за 12ч, но наклон даёт среднюю скорость)
             let reg3 = linearRegression(x, smoothedPress);
-            let slope_mmHg_per_sec = reg3.slope;
-            let delta3h = slope_mmHg_per_sec * (3 * 3600);
-            
-            // Регрессия за 6 часов: берём подмассив точек за последние 6 часов
+            let delta3h = reg3.slope * (3 * 3600);
+            let delta6h = delta3h * 2;
             let cutoff6h = nowSec - 6*3600;
             let points6h = recentPoints.filter(p => p.ts >= cutoff6h);
             if (points6h.length >= 3) {
@@ -523,52 +463,33 @@
                 let t06 = ts6[0];
                 let x6 = ts6.map(t => t - t06);
                 let reg6 = linearRegression(x6, smoothedPress6);
-                let delta6h = reg6.slope * (6 * 3600);
-                // Сохраняем для отображения
-                window._delta6h = delta6h;
-            } else {
-                window._delta6h = delta3h * 2; // fallback
+                delta6h = reg6.slope * (6 * 3600);
             }
-            
-            // ---- Влажность и температура (медианное сглаживание) ----
             let rawHum = recentPoints.map(p => p.hum);
             let smoothedHum = medianSmoothing(rawHum, 5);
             let humChange = smoothedHum[smoothedHum.length-1] - smoothedHum[0];
-            
             let rawTemp = recentPoints.map(p => p.temp);
             let smoothedTemp = medianSmoothing(rawTemp, 5);
             let tempChange = smoothedTemp[smoothedTemp.length-1] - smoothedTemp[0];
-            
             let lastLux = recentPoints[recentPoints.length-1].lux;
             let isDark = lastLux < 50;
             let lastPressMm = rawPress[rawPress.length-1];
-            
-            // ---- ИНТЕЛЛЕКТУАЛЬНЫЙ ПРОГНОЗ (скоринг) ----
             let score = 0;
-            
-            // Основной фактор: скорость изменения давления за 3 часа
             if (delta3h <= -4.0) score += 4;
             else if (delta3h <= -2.5) score += 3;
             else if (delta3h <= -1.2) score += 2;
             else if (delta3h <= -0.5) score += 1;
             else if (delta3h >= 2.5) score -= 2;
             else if (delta3h >= 1.0) score -= 1;
-            
-            // Влажность и температура
             if (humChange > 10) score += 1;
             if (humChange > 20) score += 1;
             if (tempChange < -1.5) score += 1;
             if (isDark && delta3h < -1) score += 1;
-            
-            // ---- НОВОЕ: учёт абсолютного давления (низкое давление = хуже погода) ----
             if (lastPressMm < 745) {
                 score += 1;
-                if (lastPressMm < 730) score += 1;   // очень низкое давление
+                if (lastPressMm < 730) score += 1;
             }
-            
             score = Math.min(6, Math.max(-2, score));
-            
-            // Формируем текстовый прогноз
             let forecastText = "", forecastIcon = "";
             if (delta3h <= -4.0 && humChange > 15) {
                 forecastText = "⚠️ Штормовое предупреждение! Ожидаются сильные осадки и ветер";
@@ -586,20 +507,12 @@
                 forecastText = "Прогноз: погода стабильна, без резких изменений";
                 forecastIcon = "⛅";
             }
-            
             let deltaSign3 = delta3h > 0 ? "+" : "";
-            let deltaSign6 = window._delta6h > 0 ? "+" : "";
-            let trendDetails = `Δ3ч: ${deltaSign3}${delta3h.toFixed(1)} мм рт.ст. | Δ6ч: ${deltaSign6}${window._delta6h.toFixed(1)} мм рт.ст. | Давление: ${lastPressMm.toFixed(0)} мм`;
-            
+            let deltaSign6 = delta6h > 0 ? "+" : "";
+            let trendDetails = `Δ3ч: ${deltaSign3}${delta3h.toFixed(1)} мм рт.ст. | Δ6ч: ${deltaSign6}${delta6h.toFixed(1)} мм рт.ст. | Давление: ${lastPressMm.toFixed(0)} мм`;
             forecastDiv.innerHTML = `<div class="flex items-center gap-2">${forecastIcon} ${forecastText}</div>`;
-            trendDetailsSpan.innerText = trendDetails;
-            
-            // Цвет виджета в зависимости от score
-            const widgetMain = document.getElementById('forecastWidget');
-            widgetMain.className = "mt-2 text-sm font-semibold flex flex-col items-start gap-1 " + 
-                (score >= 3 ? "text-red-400" : (score <= -1 ? "text-green-400" : "text-amber-300"));
-            
-            // Обновляем карточки трендов (влажность, температура, давление)
+            if (trendDetailsSpan) trendDetailsSpan.innerText = trendDetails;
+            forecastDiv.className = "mt-2 text-sm font-semibold flex flex-col items-start gap-1 " + (score >= 3 ? "text-red-400" : (score <= -1 ? "text-green-400" : "text-amber-300"));
             if (smoothedHum.length >= 2) {
                 let hum3h = smoothedHum[smoothedHum.length-1] - (smoothedHum[smoothedHum.length-2] || smoothedHum[0]);
                 document.getElementById('trend-hum').innerHTML = `${hum3h > 0 ? "↑ +" : "↓ "}${Math.abs(hum3h).toFixed(0)}% (3ч)`;
@@ -614,14 +527,12 @@
             document.getElementById('trend-press').className = `text-xs font-medium mt-1 ${delta3h > 0 ? 'text-emerald-400' : 'text-amber-500'}`;
         }
 
-        // ---------- ОСТАЛЬНЫЕ ФУНКЦИИ (график, виджеты) ----------
         function updateChart(labels, timestamps, temps, hums, press, lux, scaleConfig) {
             const ctx = document.getElementById('weatherChart').getContext('2d');
             const showTemp = currentChartMode === "combined" || currentChartMode === "temperature";
             const showHum = currentChartMode === "combined";
             const showPress = currentChartMode === "combined" || currentChartMode === "pressure";
             const showLux = currentChartMode === "combined";
-
             if (myChart) {
                 myChart.data.labels = labels;
                 myChart.data.timestamps = timestamps;
@@ -637,7 +548,6 @@
                 myChart.update('none');
                 return;
             }
-
             const dayNightBackgroundPlugin = {
                 id: 'dayNightBackground',
                 beforeDraw: (chart) => {
@@ -663,7 +573,6 @@
                     ctx.restore();
                 }
             };
-
             myChart = new Chart(ctx, {
                 type: 'line',
                 data: {
@@ -694,16 +603,13 @@
             const rawHum = Number(lastPoint.hum);
             const rawPress = Number(lastPoint.press);
             const rawLux = Number(lastPoint.lux);
-
             document.getElementById('card-temp').innerText = (isNaN(rawTemp) ? "--" : rawTemp.toFixed(1)) + " °C";
             document.getElementById('card-hum').innerText = (isNaN(rawHum) ? "--" : Math.round(rawHum)) + " %";
             document.getElementById('card-press').innerText = (isNaN(rawPress) ? "--" : Math.round(rawPress * 0.750062)) + " мм";
             document.getElementById('card-lux').innerText = (isNaN(rawLux) ? "--" : Math.round(rawLux)) + " Lx";
-
             const lastDate = new Date(lastPoint.ts * 1000);
             const diffMinutes = Math.floor((Date.now() - lastDate.getTime()) / 60000);
             statusLabel.innerText = `Данные от: ${lastDate.toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}`;
-
             if (diffMinutes < (SEND_INTERVAL_MIN + 5)) { 
                 statusBadge.innerHTML = `<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-900/50 text-green-400 border border-green-500/30"><span class="w-2 h-2 mr-1.5 bg-green-500 rounded-full animate-pulse"></span>Онлайн</span>`;
             } else {
